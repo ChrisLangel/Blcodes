@@ -1,4 +1,4 @@
-      PROGRAM GETREK
+      PROGRAM BLQUANT
 C
 C     Take "k" and chord location, output Re_k
 C
@@ -6,32 +6,36 @@ C
 #include "precis.h"
       CHARACTER(80) :: GFILE,QFILE,OFILE
       LOGICAL :: EXIST
-      INTEGER :: IUNIT,OUNIT,J,K,L,QUNIT,IND
-      INTEGER :: NGRID,MGRID,NQ,NQC,N,IBLANK,SD
+      INTEGER :: IUNIT,OUNIT,J,K,L,QUNIT,IND,MAXVEL
+      INTEGER :: NGRID,MGRID,NQ,NQC,N,IBLANK,SD,MAXIND
       INTEGER :: NI,NJ,NK,NIDUMP,NJDUMP,NKDUMP,IG
       INTEGER :: JJ,LL,KK,KS,JS,JIND,JCUR,KIN,KCUR
       REAL :: SDIST,DIST,DISTK,KHEIGHT,REY,REK,REFMACH,
-     &         UKLOW,UKHIGH,REKHIGH,REKLOW,DISTLOW,
+     &         UKLOW,UKHIGH,REKHIGH,REKLOW,DISTLOW,H,
      &         REKAVG,UKLOW2,UKHIGH2,DISTLEN,DISTINT,
-     &         UKLOWAVG,UKHIGHAVG,DS
+     &         UKLOWAVG,UKHIGHAVG,DS,DX,DY,DV,DU,VORT,
+     &         INVOR,MAXVOR,RHOE,MOMTHK,DISTHK,U,UE,RHO,
+     &         MTHK,DTHK,HT,IDTK,IHK,IDTKM,IHKM,UM,RHOM  
       REAL,  DIMENSION(:,:,:), ALLOCATABLE :: X,Y,Z
       REAL,  DIMENSION(:,:,:,:), ALLOCATABLE :: Q
       INTEGER,  DIMENSION(:), ALLOCATABLE :: JD,KD,LD
-   
+      LOGICAL :: HITMAX 
 C
-C    Get the input filenames
+C     Going to hard code input file names for now
 C
-      WRITE(*,1)
- 1    FORMAT('Enter PLOT3D grid filename:  ',$)
-      READ(*,2,END=100) GFILE
+C      WRITE(*,1)
+C 1    FORMAT('Enter PLOT3D grid filename:  ',$)
+C      READ(*,2,END=100) GFILE
  2    FORMAT(A)
 C
 C
-      WRITE(*,22)
-22    FORMAT('Enter PLOT3D qfile filename:  ',$)
-      READ(*,2,END=100) QFILE
+C      WRITE(*,22)
+C22    FORMAT('Enter PLOT3D qfile filename:  ',$)
+C      READ(*,2,END=100) QFILE
 C 
-C 
+C
+      GFILE = 'grid.in'
+      QFILE = 'q.save'  
       IUNIT = 1
       QUNIT = 2
       OPEN(1,FILE=GFILE,STATUS='OLD',FORM='UNFORMATTED')
@@ -62,7 +66,7 @@ C
       ENDIF
       NQ = 5
  7    CONTINUE      
-      WRITE(*,101)
+C      WRITE(*,101)
       WRITE(*,8) NI,NJ,NK
  8    FORMAT('Reading Grid file, dimensioned ',3I7)
 C
@@ -116,7 +120,7 @@ C
          READ(QUNIT)
          READ(QUNIT)
       ENDDO
-C
+C     Allocate Q var array and read the q file
       ALLOCATE( Q(NI,NJ,NK,NQ) )
       CALL RDQ(NI,NJ,NK,NQ,NQC,QUNIT,QFILE,MGRID,Q,
      &          REFMACH,REY)
@@ -124,89 +128,94 @@ C
 C
 C
       CLOSE(QUNIT)    
-      WRITE(*,2,ADVANCE='NO') 'Enter output file name: '
-      READ(*,*,END=100) OFILE
+C     
+C      WRITE(*,2,ADVANCE='NO') 'Enter output file name: '
+C      READ(*,*,END=100) OFILE
+      OFILE = 'BL_info.txt' 
       OUNIT = 801
       OPEN(OUNIT,FILE=OFILE,STATUS='REPLACE',FORM='FORMATTED')
 C
-C
-C
-      WRITE(*,101)
-      WRITE(*,81,ADVANCE='NO')
-   81 FORMAT('Input k/c (Roughness height/chord): ')
-      READ(*,*,END=100) KS
-C
-C      WRITE(*,82,ADVANCE='NO')
-C   82 FORMAT('Input s/c location:  ')
-C      READ(*,*,END=100) SDIST
-C
-C
-C
-C
-C
-C
-      DO IND = 1,NI
-
-      JIND    = IND
-      DISTK   = 0
-      KHEIGHT = KS*(0.000001)
-      KCUR    = 2
-      DO WHILE (DISTK.LT.KHEIGHT)
-         DISTK = 0
-         DO KIN = 2,KCUR
-            DISTK = DISTK+SQRT((X(JIND,KIN,2) - X(JIND,(KIN-1),2))**2 +
-     &                         (Z(JIND,KIN,2) - Z(JIND,(KIN-1),2))**2 )
-         ENDDO
-         KCUR = KCUR + 1 
-         IF (KCUR.GT.NJ) THEN
-            DISTK = DISTK+1           
-         ENDIF
-      ENDDO 
-      DISTLOW = DISTK - SQRT((X(JIND,KIN,2) - X(JIND,(KIN-1),2))**2 +
-     &                         (Z(JIND,KIN,2) - Z(JIND,(KIN-1),2))**2 )
-C      WRITE(*,84) JCUR,KCUR
-C   
-C     Obtain U at the two J indicies nearest the choosen coordinate.
-C
-      UKLOW  = Q((JIND),(KIN-1),2,2)  
-      UKHIGH = Q((JIND),KIN,2,2)
-C      
-C     Linearly interpolate along the j-direction      
-C
-C 
-      REKLOW = REY*KHEIGHT*UKLOW/REFMACH
-      REKHIGH = REY*KHEIGHT*UKHIGH/REFMACH
+C     
+      DO JIND = 2,NI-1
+          INVOR  = 0.0
+          MAXVOR = 0.0
+          MAXIND = 1
+          DO KIN = 2,NJ-1 
+             DX = X(JIND+1,KIN,2) - X(JIND-1,KIN,2)
+             DY = Z(JIND,KIN+1,2) - Z(JIND,KIN-1,2) 
+             DU = Q(JIND,KIN+1,2,2) - Q(JIND,KIN-1,2,2)  
+             DV = Q(JIND+1,KIN,2,3) - Q(JIND-1,KIN,2,3)  
+             VORT = DV/DX - DU/DY 
+             INVOR = INVOR + VORT*(Z(JIND,KIN,2)-Z(JIND,KIN-1,2))    
+             IF (ABS(INVOR) .GT. MAXVOR) THEN
+                MAXVOR = ABS(INVOR)
+             END IF
+          END DO
 C         
-      REKAVG = ((REKHIGH-REKLOW)/(DISTK-DISTLOW))*(KHEIGHT-DISTK) 
-     &           + REKHIGH
-      WRITE(*,103) JIND,REKAVG
-      WRITE(OUNIT,103) JIND,REKAVG
- 103  FORMAT(I5,F15.7)
-      ENDDO
+          HITMAX = .False.
+C     Compute again until you hit .995 max
+          INVOR = 0.0 
+          DO KIN = 2,NJ -1
+             DX = X(JIND+1,KIN,2) - X(JIND-1,KIN,2)
+             DY = Z(JIND,KIN+1,2) - Z(JIND,KIN-1,2) 
+             DU = Q(JIND,KIN+1,2,2) - Q(JIND,KIN-1,2,2)  
+             DV = Q(JIND+1,KIN,2,3) - Q(JIND-1,KIN,2,3)  
+             VORT = DV/DX - DU/DY 
+             INVOR = INVOR + VORT*(Z(JIND,KIN,2)-Z(JIND,KIN-1,2))   
+             IF ( ABS(INVOR) .gt. MAXVOR*.9995 ) THEN 
+                IF (HITMAX .eqv. .False.) THEN
+                   HITMAX = .True.
+                   MAXIND = KIN 
+C                   WRITE(*,*) ABS(INVOR),MAXVOR
+                END IF 
+             END IF
+          END DO
+C         Some limiter (BAD!!)          
+C          MAXIND = MIN(MAXIND,80)
+          RHOE   = Q(JIND,MAXIND,2,1)
+          UE     = Q(JIND,MAXIND,2,2)    
+C         Compute momentum and displacement thickness
+          DISTHK = 0.0
+          MOMTHK = 0.0  
+          DO KIN = 2,MAXIND
+             U    = Q(JIND,KIN,2,2) 
+             RHO  = Q(JIND,KIN,2,1)  
+             UM   = Q(JIND,KIN-1,2,2) 
+             RHOM = Q(JIND,KIN-1,2,1)  
+             DY   = SQRT((Z(JIND,KIN,2) - Z(JIND,KIN-1,2))**2 +
+     &              (X(JIND,KIN,2) - X(JIND,KIN-1,2))**2)  
+C             IDTK,IHK,IDTKM,IHKM
+C    
+             IDTK   = (1- (RHO*U/(RHOE*UE)))
+             IDTKM  = (1- (RHOM*UM/(RHOE*UE)))
+             IHK    = (RHO*U/(RHOE*UE))*(1-(U/UE))
+             IHKM   = (RHOM*UM/(RHOE*UE))*(1-(U/UE))
+             DISTHK = DISTHK + 0.5*(IDTK+IDTKM)*DY
+             MOMTHK = MOMTHK + 0.5*(IHK+IHKM)*DY
+             H      = DISTHK/MOMTHK  
+          END DO
+C         Try a slightly different way to comute momenthick
+          KIN = 2
+          U = Q(JIND,KIN,2,2)  
+          DO WHILE ( (1 - (U/UE)) > 0.0 .and. KIN < NJ-1)
+             U   = Q(JIND,KIN,2,2) 
+             RHO = Q(JIND,KIN,2,1)  
+             DY  = Z(JIND,KIN,2) - Z(JIND,KIN-1,2) 
+             DTHK = DISTHK + (1- (RHO*U/(RHOE*UE)))*DY
+             MTHK = MOMTHK + (RHO*U/(RHOE*UE))*(1-(U/UE))*DY
+             HT   = DISTHK/MOMTHK
+             KIN  = KIN + 1 
+          END DO  
+          WRITE(OUNIT,*) X(JIND,1,2),MAXIND,JIND,DISTHK,MOMTHK,H
+          WRITE(*,*) MAXVOR,MAXIND,JIND,DISTHK,MOMTHK,H
+      END DO 
 
-C     Gradients are much more substancial in the K direction
-C     Output the direct distance the velocity is extracted from.
-C      
-      WRITE(*,101)
-      WRITE(*,87) DISTK*1000000
-  87  FORMAT('Distance (z/c [E-6] ) at (high) = ', F7.3)      
-      WRITE(*,88) DISTLOW*1000000
-  88  FORMAT('Distance (z/c [E-6] ) at (low) =', F7.3)      
-C
-C 
-      WRITE(*,101)
- 101  FORMAT('')
-      WRITE(*,86) REKHIGH 
-  86  FORMAT('RE_k (high) = ',F8.4)  
-      WRITE(*,85) REKLOW 
-  85  FORMAT('RE_k (low) = ',F8.4)      
-C
-      WRITE(*,101)
-      WRITE(*,89) REKAVG
-  89  FORMAT('Weighted Average RE_k  = ',F8.4)   
 
-C 
-  84  FORMAT(2I5)
+C      WRITE(*,103) JIND
+C      WRITE(OUNIT,103) JIND
+C 103  FORMAT(I5)
+       
+
  100  CONTINUE
       STOP
       END
