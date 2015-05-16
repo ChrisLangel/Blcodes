@@ -12,10 +12,11 @@ C
       INTEGER :: JJ,LL,KK,KS,JS,JIND,JCUR,KIN,KCUR
       REAL :: SDIST,DIST,DISTK,KHEIGHT,REY,REK,REFMACH,
      &         UKLOW,UKHIGH,REKHIGH,REKLOW,DISTLOW,H,
-     &         REKAVG,UKLOW2,UKHIGH2,DISTLEN,DISTINT,
+     &         REKAVG,UKLOW2,UKHIGH2,DISTLEN,DISTINT,MV,
      &         UKLOWAVG,UKHIGHAVG,DS,DX,DY,DV,DU,VORT,
      &         INVOR,MAXVOR,RHOE,MOMTHK,DISTHK,U,UE,RHO,
-     &         MTHK,DTHK,HT,IDTK,IHK,IDTKM,IHKM,UM,RHOM  
+     &         MTHK,DTHK,HT,IDTK,IHK,IDTKM,IHKM,UM,RHOM,
+     &         RETH  
       REAL,  DIMENSION(:,:,:), ALLOCATABLE :: X,Y,Z
       REAL,  DIMENSION(:,:,:,:), ALLOCATABLE :: Q
       INTEGER,  DIMENSION(:), ALLOCATABLE :: JD,KD,LD
@@ -170,6 +171,18 @@ C                   WRITE(*,*) ABS(INVOR),MAXVOR
                 END IF 
              END IF
           END DO
+C         More hueristic approach where we just look for max velocity  
+          MV = 0.0
+          HITMAX = .False.
+          DO KIN = 2,NJ
+             IF ( Q(JIND,KIN,2,2) .gt. MV 
+     &           .and. HITMAX .eqv. .False.) THEN
+                MV      = Q(JIND,KIN,2,2) 
+                MAXVEL  = KIN
+             ELSE 
+                HITMAX = .True.   
+             END IF
+          END DO 
 C         Some limiter (BAD!!)          
 C          MAXIND = MIN(MAXIND,80)
           RHOE   = Q(JIND,MAXIND,2,1)
@@ -189,25 +202,35 @@ C
              IDTK   = (1- (RHO*U/(RHOE*UE)))
              IDTKM  = (1- (RHOM*UM/(RHOE*UE)))
              IHK    = (RHO*U/(RHOE*UE))*(1-(U/UE))
-             IHKM   = (RHOM*UM/(RHOE*UE))*(1-(U/UE))
+             IHKM   = (RHOM*UM/(RHOE*UE))*(1-(UM/UE))
              DISTHK = DISTHK + 0.5*(IDTK+IDTKM)*DY
              MOMTHK = MOMTHK + 0.5*(IHK+IHKM)*DY
+             RETH   = MOMTHK*REY 
              H      = DISTHK/MOMTHK  
           END DO
 C         Try a slightly different way to comute momenthick
           KIN = 2
           U = Q(JIND,KIN,2,2)  
-          DO WHILE ( (1 - (U/UE)) > 0.0 .and. KIN < NJ-1)
-             U   = Q(JIND,KIN,2,2) 
-             RHO = Q(JIND,KIN,2,1)  
-             DY  = Z(JIND,KIN,2) - Z(JIND,KIN-1,2) 
-             DTHK = DISTHK + (1- (RHO*U/(RHOE*UE)))*DY
-             MTHK = MOMTHK + (RHO*U/(RHOE*UE))*(1-(U/UE))*DY
-             HT   = DISTHK/MOMTHK
-             KIN  = KIN + 1 
+          DO KIN = 2,MAXVEL
+             UE   = MV
+             U    = Q(JIND,KIN,2,2) 
+             RHO  = Q(JIND,KIN,2,1)  
+             UM   = Q(JIND,KIN-1,2,2) 
+             RHOM = Q(JIND,KIN-1,2,1)  
+             DY   = SQRT((Z(JIND,KIN,2) - Z(JIND,KIN-1,2))**2 +
+     &              (X(JIND,KIN,2) - X(JIND,KIN-1,2))**2)  
+C             IDTK,IHK,IDTKM,IHKM
+C    
+             IDTK   = (1- (RHO*U/(RHOE*UE)))
+             IDTKM  = (1- (RHOM*UM/(RHOE*UE)))
+             IHK    = (RHO*U/(RHOE*UE))*(1-(U/UE))
+             IHKM   = (RHOM*UM/(RHOE*UE))*(1-(UM/UE))
+             DTHK   = DISTHK + 0.5*(IDTK+IDTKM)*DY
+             MTHK   = MOMTHK + 0.5*(IHK+IHKM)*DY
+             HT     = DISTHK/MOMTHK   
           END DO  
-          WRITE(OUNIT,*) X(JIND,1,2),MAXIND,JIND,DISTHK,MOMTHK,H
-          WRITE(*,*) MAXVOR,MAXIND,JIND,DISTHK,MOMTHK,H
+          WRITE(OUNIT,*) X(JIND,1,2),MAXIND,JIND,DTHK,MTHK,HT
+          WRITE(*,*) X(JIND,1,2),MAXIND,JIND,DISTHK,MOMTHK,H,RETH 
       END DO 
 
 
