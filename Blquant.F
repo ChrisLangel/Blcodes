@@ -16,7 +16,7 @@ C
      &         UKLOWAVG,UKHIGHAVG,DS,DX,DY,DV,DU,VORT,
      &         INVOR,MAXVOR,RHOE,MOMTHK,DISTHK,U,UE,RHO,
      &         MTHK,DTHK,HT,IDTK,IHK,IDTKM,IHKM,UM,RHOM,
-     &         RETH  
+     &         RETH,lu,lv,lvm,lum,DYM,DXM 
       REAL,  DIMENSION(:,:,:), ALLOCATABLE :: X,Y,Z
       REAL,  DIMENSION(:,:,:,:), ALLOCATABLE :: Q
       INTEGER,  DIMENSION(:), ALLOCATABLE :: JD,KD,LD
@@ -163,7 +163,7 @@ C     Compute again until you hit .995 max
              DV = Q(JIND+1,KIN,2,3) - Q(JIND-1,KIN,2,3)  
              VORT = DV/DX - DU/DY 
              INVOR = INVOR + VORT*(Z(JIND,KIN,2)-Z(JIND,KIN-1,2))   
-             IF ( ABS(INVOR) .gt. MAXVOR*.9995 ) THEN 
+             IF ( ABS(INVOR) .gt. MAXVOR*.995 ) THEN 
                 IF (HITMAX .eqv. .False.) THEN
                    HITMAX = .True.
                    MAXIND = KIN 
@@ -190,15 +190,19 @@ C          MAXIND = MIN(MAXIND,80)
 C         Compute momentum and displacement thickness
           DISTHK = 0.0
           MOMTHK = 0.0  
-          DO KIN = 2,MAXIND
-             U    = Q(JIND,KIN,2,2) 
-             RHO  = Q(JIND,KIN,2,1)  
-             UM   = Q(JIND,KIN-1,2,2) 
-             RHOM = Q(JIND,KIN-1,2,1)  
-             DY   = SQRT((Z(JIND,KIN,2) - Z(JIND,KIN-1,2))**2 +
-     &              (X(JIND,KIN,2) - X(JIND,KIN-1,2))**2)  
-C             IDTK,IHK,IDTKM,IHKM
-C    
+          DO KIN = 3,MAXIND 
+             lu    = Q(JIND,KIN,2,2)
+             lv    = Q(JIND,KIN,2,3)
+             lum   = Q(JIND,KIN-1,2,2)
+             lvm   = Q(JIND,KIN-1,2,3) 
+             DX   = ABS(X(JIND+1,KIN,2) - X(JIND-1,KIN,2))
+             DY   = ABS(Z(JIND,KIN+1,2) - Z(JIND,KIN-1,2))
+             DXM  = ABS(X(JIND+1,KIN-1,2) - X(JIND-1,KIN-1,2))
+             DYM  = ABS(Z(JIND,KIN,2) - Z(JIND,KIN-2,2))
+             U    = (lu*DX + lv*DY)/(SQRT(DX**2+DY**2)) 
+             UM   = (lum*DXM + lvm*DYM)/(SQRT(DXM**2+DYM**2)) 
+             RHO  = Q(JIND,KIN,2,1) 
+             RHOM = Q(JIND,KIN-1,2,1) 
              IDTK   = (1- (RHO*U/(RHOE*UE)))
              IDTKM  = (1- (RHOM*UM/(RHOE*UE)))
              IHK    = (RHO*U/(RHOE*UE))*(1-(U/UE))
