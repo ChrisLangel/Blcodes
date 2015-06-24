@@ -233,7 +233,7 @@ C
              MTHK   = MOMTHK + 0.5*(IHK+IHKM)*DY
              HT     = DISTHK/MOMTHK   
           END DO  
-          WRITE(OUNIT,*) X(JIND,1,2),MAXIND,JIND,DTHK,MTHK,HT
+          WRITE(OUNIT,*) X(JIND,1,2),MAXIND,JIND,DTHK,MTHK,HT,RETH
           WRITE(*,*) X(JIND,1,2),MAXIND,JIND,DISTHK,MOMTHK,H,RETH 
       END DO 
 
