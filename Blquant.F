@@ -16,7 +16,7 @@ C
      &         UKLOWAVG,UKHIGHAVG,DS,DX,DY,DV,DU,VORT,
      &         INVOR,MAXVOR,RHOE,MOMTHK,DISTHK,U,UE,RHO,
      &         MTHK,DTHK,HT,IDTK,IHK,IDTKM,IHKM,UM,RHOM,
-     &         RETH,lu,lv,lvm,lum,DYM,DXM 
+     &         RETH,lu,lv,lvm,lum,DYM,DXM,DETA 
       REAL,  DIMENSION(:,:,:), ALLOCATABLE :: X,Y,Z
       REAL,  DIMENSION(:,:,:,:), ALLOCATABLE :: Q
       INTEGER,  DIMENSION(:), ALLOCATABLE :: JD,KD,LD
@@ -207,8 +207,10 @@ C         Compute momentum and displacement thickness
              IDTKM  = (1- (RHOM*UM/(RHOE*UE)))
              IHK    = (RHO*U/(RHOE*UE))*(1-(U/UE))
              IHKM   = (RHOM*UM/(RHOE*UE))*(1-(UM/UE))
-             DISTHK = DISTHK + 0.5*(IDTK+IDTKM)*DY
-             MOMTHK = MOMTHK + 0.5*(IHK+IHKM)*DY
+             DETA   = SQRT((Z(JIND,KIN,2) - Z(JIND,KIN-1,2))**2 +
+     &              (X(JIND,KIN,2) - X(JIND,KIN-1,2))**2)  
+             DISTHK = DISTHK + 0.5*(IDTK+IDTKM)*DETA
+             MOMTHK = MOMTHK + 0.5*(IHK+IHKM)*DETA 
              RETH   = MOMTHK*REY 
              H      = DISTHK/MOMTHK  
           END DO
